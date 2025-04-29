@@ -1,16 +1,22 @@
-# filepath: [weather.py](http://_vscodecontentref_/1)
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from time import sleep
 
-import pytz  # Add this import for timezone handling
+import pytz
 import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
+from geopy.geocoders import Nominatim
+from timezonefinder import TimezoneFinder
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+
+# Initialize TimezoneFinder and Geolocator
+tf = TimezoneFinder()
+geolocator = Nominatim(user_agent="weather_app", timeout=10)
 
 # OpenWeather API key
 OPENWEATHER_API_KEY = os.getenv("OWAPIKEY")
@@ -33,60 +39,35 @@ def fetch_weather_data(city, state, country):
         if response.status_code == 200:
             data = response.json()
             return {
-                "fetch_timestamp": datetime.utcnow().isoformat()
-                + "Z",  # Add UTC timestamp
+                "fetch_timestamp": datetime.now(tz=timezone.utc).isoformat() + "Z",
                 "temperature": data["main"]["temp"],
-                "conditions": data["weather"][0]["description"],
                 "humidity": data["main"]["humidity"],
+                "conditions": data["weather"][0]["description"],
             }
         else:
+            print(f"Failed to fetch weather data: {response.status_code}")
             return None
     except requests.exceptions.Timeout:
-        print(f"Request to OpenWeather API timed out for {
-            city}, {state}, {country}")
+        print(f"Request to OpenWeather API timed out for {city}, {state}, {country}")
         return None
     except requests.exceptions.RequestException as e:
         print(f"An error occurred: {e}")
         return None
 
 
-@app.route("/api/weather/current", methods=["GET"])
-def get_current_weather():
-    location = request.args.get("location", "").lower()
-
-    # Supported locations
-    supported_locations = {
-        "berkeley": ("Berkeley", "CA", "US"),
-        "milpitas": ("Milpitas", "CA", "US"),
-        "san jose": ("San Jose", "CA", "US"),
-        "seattle": ("Seattle", "WA", "US"),
-        "delta": ("Delta", "BC", "Canada"),
-        "kelowna": ("Kelowna", "BC", "Canada"),
-        "hangzhou": ("Hangzhou", "Zhejiang", "China"),
-        "shanghai": ("Shanghai", "Shanghai", "China"),
-    }
-
-    if location not in supported_locations:
-        return jsonify({"error": "Location not supported"}), 404
-
-    city, state, *country = supported_locations[location]
-    # Default to US if no country is provided
-    country = country[0] if country else "US"
-    weather = fetch_weather_data(city, state, country)
-
-    if not weather:
-        return jsonify({"error": "Failed to fetch weather data"}), 500
-
-    return jsonify(
-        {
-            "location": location,
-            "current": weather,
-            "timestamp": datetime.now().isoformat(),
-        }
-    )
+def retry_geocode(location_query, retries=3, delay=5):
+    for attempt in range(retries):
+        try:
+            location = geolocator.geocode(location_query)
+            if location:
+                return location
+        except Exception as e:
+            print(f"Geocoding attempt {attempt + 1} failed: {e}")
+            sleep(delay)
+    return None
 
 
-@app.route("/api/weather/all", methods=["GET"])
+@app.route("/api/weather/all", methods=["GET", "POST"])
 def get_all_weather_data():
     # Define locations with city, state, country, and timezone
     locations = {
@@ -110,20 +91,57 @@ def get_all_weather_data():
             )
             weather_data.append(
                 {
-                    "fetch_timestamp": weather[
-                        "fetch_timestamp"
-                    ],  # Include fetch timestamp
-                    "local_time": local_time,  # Include local time
-                    "city": city,
-                    "state": state,
-                    "country": country,
+                    "fetch_timestamp": weather["fetch_timestamp"],
+                    "local_time": local_time,
+                    "city": city.title(),
+                    "state": state.upper(),
+                    "country": country.upper(),
                     "temperature": f"{weather['temperature']:.1f}",
                     "humidity": weather["humidity"],
                     "conditions": weather["conditions"],
                 }
             )
 
-    # Sort data by country, then state, then city
+    # Handle new location input from the user
+    if request.method == "POST":
+        new_location = request.form.get("location", "").strip()
+        if new_location:
+            try:
+                city, state, country = new_location.split(",")
+                city, state, country = city.strip(), state.strip(), country.strip()
+                weather = fetch_weather_data(city, state, country)
+                if weather:
+                    location_query = f"{city}, {state}, {country}"
+                    location = retry_geocode(location_query)
+                    if location:
+                        timezone = tf.timezone_at(
+                            lng=location.longitude, lat=location.latitude
+                        )
+                        if not timezone:
+                            timezone = "UTC"
+                        local_time = datetime.now(pytz.timezone(timezone)).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                        weather_data.append(
+                            {
+                                "fetch_timestamp": weather["fetch_timestamp"],
+                                "local_time": local_time,
+                                "city": city.title(),
+                                "state": state.upper(),
+                                "country": country.upper(),
+                                "temperature": f"{weather['temperature']:.1f}",
+                                "humidity": weather["humidity"],
+                                "conditions": weather["conditions"],
+                            }
+                        )
+                        # Sort the data after inserting the new location
+                        weather_data.sort(
+                            key=lambda x: (x["country"], x["state"], x["city"])
+                        )
+            except ValueError:
+                print(f"Invalid location format: {new_location}")
+
+    # Sort data by country, then state, then city (in case no new data was added)
     weather_data.sort(key=lambda x: (x["country"], x["state"], x["city"]))
 
     # Generate HTML table
@@ -164,6 +182,11 @@ def get_all_weather_data():
         </head>
         <body>
             <h1>Weather Data for All Locations</h1>
+            <form method="POST">
+                <label for="location">Enter a new location (City, State, Country):</label>
+                <input type="text" id="location" name="location" required>
+                <button type="submit">Add Location</button>
+            </form>
             <table>
                 <tr>
                     <th>Fetch Time (UTC)</th>
