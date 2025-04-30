@@ -179,6 +179,7 @@ def get_all_weather_data():
         try:
             with open(file_path, mode="r", encoding="utf-8") as file:
                 reader = csv.reader(file)
+                next(reader)  # Skip the first row (header row)
                 for row in reader:
                     if len(row) == 5:
                         key, city, state, country, timezone = row
@@ -301,6 +302,7 @@ def get_all_weather_data():
     <html>
         <head>
             <title>Weather Data</title>
+            <meta http-equiv="refresh" content="900"> <!-- Refresh every 900 seconds -->
             <style>
                 table {{
                     border-collapse: collapse;
