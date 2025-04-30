@@ -1,3 +1,57 @@
+"""
+Weather Data Application
+========================
+
+This Flask-based web application fetches and displays real-time weather data
+for predefined locations and allows users to add new locations dynamically.
+The application integrates with the OpenWeather API to retrieve weather
+information and uses geopy for geocoding to fetch latitude and longitude
+coordinates for locations.
+
+Features:
+---------
+1. Displays weather data for a predefined list of locations, including:
+   - Local time
+   - City, state, and country
+   - Coordinates (latitude and longitude)
+   - Temperature (in Celsius)
+   - Humidity
+   - Weather conditions
+
+2. Allows users to add new locations by entering the city, state, and country via a form.
+
+3. Ensures that the weather data table contains unique entries by avoiding duplicate locations.
+
+4. Automatically refreshes weather data for predefined locations when the page is loaded.
+
+5. Sorts the weather data table by country, state, and city for better readability.
+
+Technologies Used:
+------------------
+- Flask: Web framework for building the application.
+- OpenWeather API: To fetch real-time weather data.
+- geopy: To perform geocoding and retrieve latitude and longitude for locations.
+- pytz: To handle time zones and display local times for locations.
+
+How to Run:
+-----------
+1. Install the required dependencies:
+    pip install flask requests python-dotenv geopy timezonefinder pytz
+
+2. Set up the OpenWeather API key in a `.env` file:
+    OWAPIKEY=your_openweather_api_key
+
+3. Run the application:
+    python getow.py
+
+4. Open the application in your browser at:
+    http://127.0.0.1:5000/api/weather/all
+
+5. View the weather data for predefined locations or add new locations using the form.
+
+"""
+# getow.py
+# Import necessary libraries
 import os
 from datetime import datetime, timezone
 from time import sleep
