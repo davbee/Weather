@@ -50,7 +50,7 @@ How to Run:
 5. View the weather data for predefined locations or add new locations using the form.
 
 """
-# getow.py
+
 # Import necessary libraries
 import os
 from datetime import datetime, timezone
@@ -59,28 +59,45 @@ from time import sleep
 import pytz
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from geopy.geocoders import Nominatim
 from timezonefinder import TimezoneFinder
 
-# Load environment variables
+# Load environment variables from the `.env` file
 load_dotenv()
 
+# Initialize Flask application
 app = Flask(__name__)
 
-# Initialize TimezoneFinder and Geolocator
+# Initialize TimezoneFinder and Geolocator for timezone and geocoding
 tf = TimezoneFinder()
 geolocator = Nominatim(user_agent="weather_app", timeout=10)
 
-# OpenWeather API key
+# OpenWeather API key loaded from environment variables
 OPENWEATHER_API_KEY = os.getenv("OWAPIKEY")
 
 # OpenWeather API endpoint
 OPENWEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 
+# Global variable to store weather data
+weather_data = []
 
-# Function to fetch real-time weather data from OpenWeather
+
+# Function to fetch real-time weather data from OpenWeather API
 def fetch_weather_data(city, state, country):
+    """
+    Fetch weather data for a given city, state, and country using the
+    OpenWeather API.
+
+    Args:
+        city (str): Name of the city.
+        state (str): Name of the state.
+        country (str): Name of the country.
+
+    Returns:
+        dict: Weather data including temperature, humidity, conditions,
+        latitude, and longitude.
+    """
     params = {
         "q": f"{city},{state},{country}",
         "appid": OPENWEATHER_API_KEY,
@@ -93,7 +110,6 @@ def fetch_weather_data(city, state, country):
         if response.status_code == 200:
             data = response.json()
             return {
-                # "fetch_timestamp": datetime.now(tz=timezone.utc).isoformat() + "Z",
                 "temperature": data["main"]["temp"],
                 "humidity": data["main"]["humidity"],
                 "conditions": data["weather"][0]["description"],
@@ -111,7 +127,19 @@ def fetch_weather_data(city, state, country):
         return None
 
 
+# Function to retry geocoding in case of failure
 def retry_geocode(location_query, retries=3, delay=5):
+    """
+    Retry geocoding a location in case of failure.
+
+    Args:
+        location_query (str): Location query string (e.g., "City, State, Country").
+        retries (int): Number of retry attempts.
+        delay (int): Delay between retries in seconds.
+
+    Returns:
+        geopy.location.Location: Geocoded location object or None if all retries fail.
+    """
     for attempt in range(retries):
         try:
             location = geolocator.geocode(location_query)
@@ -123,61 +151,78 @@ def retry_geocode(location_query, retries=3, delay=5):
     return None
 
 
-# Global variable to store weather data
-weather_data = []
-
-
 @app.route("/api/weather/all", methods=["GET", "POST"])
 def get_all_weather_data():
+    """
+    Flask route to display weather data for predefined locations and handle new location input.
+
+    Returns:
+        str: HTML page displaying the weather data table.
+    """
     global weather_data  # Use the global weather_data list
 
-    # Define locations with city, state, country, and timezone
+    # Define predefined locations with city, state, country, and timezone
     locations = {
         "delta": ("Delta", "BC", "Canada", "America/Vancouver"),
         "kelowna": ("Kelowna", "BC", "Canada", "America/Vancouver"),
         "saskatoon": ("Saskatoon", "SA", "Canada", "America/Regina"),
         "beijing": ("Beijing", "Beijing", "China", "Asia/Shanghai"),
+        "shanghai": ("Shanghai", "Shanghai", "China", "Asia/Shanghai"),
         "hangzhou": ("Hangzhou", "Zhejiang", "China", "Asia/Shanghai"),
         "ningbo": ("Ningbo", "Zhejiang", "China", "Asia/Shanghai"),
-        "shanghai": ("Shanghai", "Shanghai", "China", "Asia/Shanghai"),
         "shaoxing": ("Shaoxing", "Zhejiang", "China", "Asia/Shanghai"),
         "tokyo": ("Tokyo", "Tokyo", "Japan", "Asia/Tokyo"),
         "berkeley": ("Berkeley", "CA", "US", "America/Los_Angeles"),
-        "cronton-on-hudson": ("Cronton-on-Hudson", "NY", "US", "America/New_York"),
-        "yonkers": ("Yonkers", "NY", "US", "America/New_York"),
-        "cronton": ("Cronton", "NY", "US", "America/New_York"),
-        "honolulu": ("Honolulu", "HI", "US", "Pacific/Honolulu"),
-        "lynnwood": ("Lynnwood", "WA", "US", "America/los_Angeles"),
         "milpitas": ("Milpitas", "CA", "US", "America/Los_Angeles"),
-        "san jose": ("San Jose", "CA", "US", "America/Los_Angeles"),
+        "honolulu": ("Honolulu", "HI", "US", "Pacific/Honolulu"),
+        "croton-on-hudson": ("Croton-on-Hudson", "NY", "US", "America/New_York"),
+        "lynnwood": ("Lynnwood", "WA", "US", "America/Los_Angeles"),
     }
 
     # Refresh weather data for predefined locations
     refreshed_data = {}
     for location, (city, state, country, timezone) in locations.items():
-        weather = fetch_weather_data(city, state, country)
-        if weather:
-            location_query = f"{city}, {state}, {country}"
-            location = retry_geocode(location_query)
-            if location:
-                latitude = location.latitude
-                longitude = location.longitude
-                local_time = datetime.now(pytz.timezone(timezone)).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-                # Use a unique key (city, state, country) to ensure uniqueness
-                key = (city.lower(), state.lower(), country.lower())
-                refreshed_data[key] = {
-                    # "fetch_timestamp": weather["fetch_timestamp"],
-                    "local_time": local_time,
-                    "city": city.title(),
-                    "state": state.upper(),
-                    "country": country.upper(),
-                    "coordinates": f"{latitude:.6f}, {longitude:.6f}",  # Add coordinates
-                    "temperature": f"{weather['temperature']:.1f}",
-                    "humidity": weather["humidity"],
-                    "conditions": weather["conditions"],
-                }
+
+        def process_location(city, state, country, timezone):
+            """
+            Process a location to fetch weather data and geocode its coordinates.
+
+            Args:
+                city (str): Name of the city.
+                state (str): Name of the state.
+                country (str): Name of the country.
+                timezone (str): Timezone of the location.
+
+            Returns:
+                tuple: Key for the location and its weather data.
+            """
+            weather = fetch_weather_data(city, state, country)
+            if weather:
+                location_query = f"{city}, {state}, {country}"
+                location = retry_geocode(location_query)
+                if location:
+                    latitude = location.latitude
+                    longitude = location.longitude
+                    local_time = datetime.now(pytz.timezone(timezone)).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    key = (city.lower(), state.lower(), country.lower())
+                    return key, {
+                        "local_time": local_time,
+                        "city": city.title(),
+                        "state": state.upper(),
+                        "country": country.upper(),
+                        "coordinates": f"{latitude:.6f}, {longitude:.6f}",
+                        "temperature": f"{weather['temperature']:.1f}",
+                        "humidity": weather["humidity"],
+                        "conditions": weather["conditions"],
+                    }
+            return None, None
+
+        for location, (city, state, country, timezone) in locations.items():
+            key, data = process_location(city, state, country, timezone)
+            if key and data:
+                refreshed_data[key] = data
 
     # Update the global weather_data list with refreshed data
     weather_data_dict = {
@@ -194,39 +239,12 @@ def get_all_weather_data():
             try:
                 city, state, country = new_location.split(",")
                 city, state, country = city.strip(), state.strip(), country.strip()
-                # Check if the location already exists in the weather_data list
                 key = (city.lower(), state.lower(), country.lower())
                 if key not in weather_data_dict:
-                    weather = fetch_weather_data(city, state, country)
-                    if weather:
-                        location_query = f"{city}, {state}, {country}"
-                        location = retry_geocode(location_query)
-                        if location:
-                            latitude = location.latitude
-                            longitude = location.longitude
-                            timezone = tf.timezone_at(
-                                lng=location.longitude, lat=location.latitude
-                            )
-                            if not timezone:
-                                timezone = "UTC"
-                            local_time = datetime.now(pytz.timezone(timezone)).strftime(
-                                "%Y-%m-%d %H:%M:%S"
-                            )
-                            # Add the new location's data to the dictionary
-                            weather_data_dict[key] = {
-                                # "fetch_timestamp": weather["fetch_timestamp"],
-                                "local_time": local_time,
-                                "city": city.title(),
-                                "state": state.upper(),
-                                "country": country.upper(),
-                                "coordinates": f"{latitude:.6f}, {longitude:.6f}",  # Add coordinates
-                                "temperature": f"{weather['temperature']:.1f}",
-                                "humidity": weather["humidity"],
-                                "conditions": weather["conditions"],
-                            }
-                            weather_data = list(
-                                weather_data_dict.values()
-                            )  # Update the list
+                    key, data = process_location(city, state, country, timezone)
+                    if key and data:
+                        weather_data_dict[key] = data
+                        weather_data = list(weather_data_dict.values())
             except ValueError:
                 print(f"Invalid location format: {new_location}")
 
