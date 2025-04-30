@@ -50,8 +50,9 @@ How to Run:
 5. View the weather data for predefined locations or add new locations using the form.
 
 """
-
+# getow.py
 # Import necessary libraries
+import csv
 import os
 from datetime import datetime, timezone
 from time import sleep
@@ -162,22 +163,51 @@ def get_all_weather_data():
     global weather_data  # Use the global weather_data list
 
     # Define predefined locations with city, state, country, and timezone
-    locations = {
-        "delta": ("Delta", "BC", "Canada", "America/Vancouver"),
-        "kelowna": ("Kelowna", "BC", "Canada", "America/Vancouver"),
-        "saskatoon": ("Saskatoon", "SA", "Canada", "America/Regina"),
-        "beijing": ("Beijing", "Beijing", "China", "Asia/Shanghai"),
-        "shanghai": ("Shanghai", "Shanghai", "China", "Asia/Shanghai"),
-        "hangzhou": ("Hangzhou", "Zhejiang", "China", "Asia/Shanghai"),
-        "ningbo": ("Ningbo", "Zhejiang", "China", "Asia/Shanghai"),
-        "shaoxing": ("Shaoxing", "Zhejiang", "China", "Asia/Shanghai"),
-        "tokyo": ("Tokyo", "Tokyo", "Japan", "Asia/Tokyo"),
-        "berkeley": ("Berkeley", "CA", "US", "America/Los_Angeles"),
-        "milpitas": ("Milpitas", "CA", "US", "America/Los_Angeles"),
-        "honolulu": ("Honolulu", "HI", "US", "Pacific/Honolulu"),
-        "croton-on-hudson": ("Croton-on-Hudson", "NY", "US", "America/New_York"),
-        "lynnwood": ("Lynnwood", "WA", "US", "America/Los_Angeles"),
-    }
+    # Load locations from an external CSV file
+    def load_locations_from_csv(file_path):
+        """
+        Load locations from a CSV file.
+
+        Args:
+            file_path (str): Path to the CSV file.
+
+        Returns:
+            dict: Dictionary of locations with keys as location names and values as tuples
+                  containing city, state, country, and timezone.
+        """
+        locations = {}
+        try:
+            with open(file_path, mode="r", encoding="utf-8") as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if len(row) == 5:
+                        key, city, state, country, timezone = row
+                        locations[key.strip().lower()] = (
+                            city.strip(),
+                            state.strip(),
+                            country.strip(),
+                            timezone.strip(),
+                        )
+        except FileNotFoundError:
+            print(f"CSV file not found: {file_path}")
+        except Exception as e:
+            print(f"An error occurred while reading the CSV file: {e}")
+        return locations
+
+    # Load locations from the CSV file
+    locations = load_locations_from_csv("locations.csv")
+    print(f"Loaded locations: {locations}")
+
+    # Generate the CSV file if it doesn't exist
+    if not os.path.exists("locations.csv"):
+        with open("locations.csv", mode="w", encoding="utf-8", newline="") as file:
+            writer = csv.writer(file)
+            # Write header row (optional)
+            writer.writerow(["key", "city", "state", "country", "timezone"])
+            # Write default locations
+            writer.writerow(["new_york", "New York", "NY", "USA", "America/New_York"])
+            writer.writerow(["london", "London", "", "UK", "Europe/London"])
+            writer.writerow(["tokyo", "Tokyo", "", "Japan", "Asia/Tokyo"])
 
     # Refresh weather data for predefined locations
     refreshed_data = {}

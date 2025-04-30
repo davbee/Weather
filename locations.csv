@@ -1,0 +1,15 @@
+key,city,state,country,timezone
+delta,Delta,BC,Canada,America/Vancouver
+kelowna,Kelowna,BC,Canada,America/Vancouver
+saskatoon,Saskatoon,SA,Canada,America/Regina
+beijing,Beijing,Beijing,China,Asia/Shanghai
+shanghai,Shanghai,Shanghai,China,Asia/Shanghai
+hangzhou,Hangzhou,Zhejiang,China,Asia/Shanghai
+ningbo,Ningbo,Zhejiang,China,Asia/Shanghai
+shaoxing,Shaoxing,Zhejiang,China,Asia/Shanghai
+tokyo,Tokyo,Tokyo,Japan,Asia/Tokyo
+berkeley,Berkeley,CA,US,America/Los_Angeles
+milpitas,Milpitas,CA,US,America/Los_Angeles
+honolulu,Honolulu,HI,US,Pacific/Honolulu
+croton-on-hudson,Croton-on-Hudson,NY,US,America/New_York
+lynnwood,Lynnwood,WA,US,America/Los_Angeles
